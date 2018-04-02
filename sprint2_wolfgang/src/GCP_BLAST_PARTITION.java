@@ -36,14 +36,17 @@ class GCP_BLAST_PARTITION implements Serializable
     // db_pat    : 'nt_50M'
     // nr        : 102
     // db_spec --> '/tmp/blast/db/nt_50M.102/nt_50M.102'
-    public GCP_BLAST_PARTITION( final String location, final String db_pat, final Integer nr )
+    public GCP_BLAST_PARTITION( final String location, final String db_pat, final Integer nr, final Boolean flat )
     {
         this.nr = nr;
         if ( nr < 100 )
             name = String.format( "%s.%02d", db_pat, nr  );
         else
             name = String.format( "%s.%d", db_pat, nr );
-        db_spec = String.format( "%s/%s/%s", location, name, name );
+        if ( flat )
+            db_spec = String.format( "%s/%s", location, name );
+        else
+            db_spec = String.format( "%s/%s/%s", location, name, name );
     }
 
     @Override public String toString()
@@ -51,10 +54,17 @@ class GCP_BLAST_PARTITION implements Serializable
         return String.format( "part( %d: '%s' )", this.nr, this.name );
     }
 
-    public Integer getPartition(Integer num_of_partitions)
+    public Integer getPartition( Integer num_of_partitions )
     {
-		if(num_of_partitions > 0 ) { return nr % num_of_partitions; }
-		else { return 0; }
+		if ( num_of_partitions > 0 )
+            return nr % num_of_partitions;
+		else
+            return 0;
     }
-    public Integer getSize(){return 1000000;}
+
+    public Integer getSize()
+    {
+        return 1000000;
+    }
 }
+

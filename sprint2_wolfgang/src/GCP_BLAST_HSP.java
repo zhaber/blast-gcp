@@ -29,17 +29,14 @@ import java.util.Random;
 
 class GCP_BLAST_HSP implements Serializable
 {
-    public final GCP_BLAST_JOB job;
     public final Long oid, qstart, qstop, sstart, sstop;
     public final Integer score;
     
-    public GCP_BLAST_HSP( final GCP_BLAST_JOB job,
-                final Long oid,
+    public GCP_BLAST_HSP( final Long oid,
                 final Long qstart, final Long qstop,
                 final Long sstart, final Long sstop,
                 final Integer score )
     {
-        this.job    = job;
         this.oid    = oid;
         this.qstart = qstart;
         this.qstop  = qstop;
@@ -48,9 +45,8 @@ class GCP_BLAST_HSP implements Serializable
         this.score  = score;
     }
     
-    public GCP_BLAST_HSP( final GCP_BLAST_JOB job )
+    public GCP_BLAST_HSP()
     {
-        this.job    = job;
         this.oid    = 0L;
         this.qstart = 0L;
         this.qstop  = 0L;
@@ -64,23 +60,20 @@ class GCP_BLAST_HSP implements Serializable
         return ( long )( rand.nextDouble() * range );
     }
     
-    public GCP_BLAST_HSP( final GCP_BLAST_JOB job, final Long oid )
+    public GCP_BLAST_HSP( final Long oid, final int query_len )
     {
-        this.job    = job;
         this.oid    = oid;
         
         Random rand = new Random();
-        qstart = nextLong( rand, (long)job.req.query.length() );
-        qstop  = qstart + nextLong( rand, (long)job.req.query.length() - qstart );
+        qstart = nextLong( rand, (long)query_len );
+        qstop  = qstart + nextLong( rand, (long)query_len - qstart );
         sstart = nextLong( rand, 1000000L );
         sstop  = sstart + nextLong( rand, 1000000L - qstart );
         score  = rand.nextInt( 1000 );
     }
-    
-    public GCP_BLAST_HSP( final GCP_BLAST_JOB job, final String blast_res )
+
+    public GCP_BLAST_HSP( final String blast_res )
     {
-        this.job = job;
-        
         Long t_oid    = 0L;
         Long t_qstart = 0L;
         Long t_qstop  = 0L;
@@ -120,6 +113,6 @@ class GCP_BLAST_HSP implements Serializable
     
     @Override public String toString()
     {
-        return String.format( "HSP( %s oid:%d %d-%d %d-%d score:%d )", job.toString(), oid, qstart, qstop, sstart, sstop, score );
+        return String.format( "HSP( oid:%d %d-%d %d-%d score:%d )", oid, qstart, qstop, sstart, sstop, score );
     }
 }

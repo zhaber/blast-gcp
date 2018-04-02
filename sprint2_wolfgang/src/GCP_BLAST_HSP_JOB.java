@@ -24,31 +24,38 @@
 *
 */
 
+import java.util.List;
+import java.util.ArrayList;
 import java.io.Serializable;
 
-class GCP_BLAST_REQUEST implements Serializable
+class GCP_BLAST_HSP_JOB implements Serializable
 {
-    public final String req_id, db_selector, query, program, params;
-    public final Integer top_n;
-
-    public GCP_BLAST_REQUEST( final String line )
-    {
-        String[] parts = line.split( "\\:" );
-        this.req_id      = ( parts.length > 0 ) ? parts[ 0 ] : "Req_Id_0001";
-        this.query       = ( parts.length > 1 ) ? parts[ 1 ] : "CCGCAAGCCAGAGCAACAGCTCTAACAAGCAGAAATTCTGACCAAACTGATCCGGTAAAACCGATCAACG";
-        this.db_selector = ( parts.length > 2 ) ? parts[ 2 ] : "nt";
-        this.program     = ( parts.length > 3 ) ? parts[ 3 ] : "blastn";
-        this.params      = ( parts.length > 4 ) ? parts[ 4 ] : "blastn";
-        top_n = 10;
-    }
+    List< GCP_BLAST_HSP_LIST > hspl;
     
+    public GCP_BLAST_HSP_JOB()
+    {
+        this.hspl = new ArrayList<>();
+    }
+   
+    public void add( final GCP_BLAST_HSP_LIST item )
+    {
+        int n = hspl.size();
+        if ( n > 0 )
+        {
+            if ( !item.isEmpty() )
+                hspl.add( item );
+        }
+        else
+        {
+            hspl.add( item );
+        }
+    }
+
     @Override public String toString()
     {
-        if ( query.length() > 10 )
-            return String.format( "req( rid:'%s' dbsel:'%s' query:'%s...' prog:'%s' params:'%s' )",
-                                  req_id, db_selector, query.substring( 0, 10 ), program, params );
-        else
-            return String.format( "req( rid:'%s' dbsel:'%s' query:'%s' prog:'%s' params:'%s' )",
-                                  req_id, db_selector, query, program, params );
+        String res = String.format( "HSPJOB( %d )\n", hspl.size() );
+        for ( GCP_BLAST_HSP_LIST item : hspl )
+            res = res + String.format( "%s\n", item.toString() );
+        return res;
     }
 }

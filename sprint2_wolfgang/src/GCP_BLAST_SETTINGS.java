@@ -65,6 +65,7 @@ public class GCP_BLAST_SETTINGS
     public Integer num_db_partitions;
     public Integer num_workers;
 
+    public Boolean flat_db_layout;
     public Boolean log_request;
     public Boolean log_job_start;
     public Boolean log_job_done;
@@ -105,6 +106,7 @@ public class GCP_BLAST_SETTINGS
         log_job_start = false;
         log_job_done = false;
         log_final = true;
+        flat_db_layout = false;
     }
     
     public GCP_BLAST_SETTINGS( final GCP_BLAST_INI ini_file, final String appName )
@@ -142,7 +144,9 @@ public class GCP_BLAST_SETTINGS
         
         num_db_partitions   = ini_file.getInt( ini_section, "num_db_partitions", default_num_db_partitions );
         num_workers         = ini_file.getInt( ini_section, "num_workers", default_num_workers );
-        
+
+        flat_db_layout      = ini_file.getBoolean( ini_section, "flat_db_layout", false );
+
         log_request     = ini_file.getBoolean( ini_section, "log_request", true );
         log_job_start   = ini_file.getBoolean( ini_section, "log_start", false );
         log_job_done    = ini_file.getBoolean( ini_section, "log_done", false );
@@ -160,6 +164,7 @@ public class GCP_BLAST_SETTINGS
         S  =  S +  String.format( "save_dir ........... %s\n", save_dir );
         S  =  S +  String.format( "num_db_partitions .. %d\n", num_db_partitions );
         S  =  S +  String.format( "num_workers ........ %d\n", num_workers );
+        S  =  S +  String.format( "flat db layout...... %s\n", Boolean.toString( flat_db_layout ) );
         S  =  S +  String.format( "log_request ........ %s\n", Boolean.toString( log_request ) );
         S  =  S +  String.format( "log_job_start ...... %s\n", Boolean.toString( log_job_start ) );
         S  =  S +  String.format( "log_job_done ....... %s\n", Boolean.toString( log_job_done ) );

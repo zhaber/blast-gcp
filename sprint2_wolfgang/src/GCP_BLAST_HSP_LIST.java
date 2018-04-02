@@ -24,31 +24,43 @@
 *
 */
 
+import java.util.List;
+import java.util.ArrayList;
 import java.io.Serializable;
 
-class GCP_BLAST_REQUEST implements Serializable
+class GCP_BLAST_HSP_LIST implements Serializable
 {
-    public final String req_id, db_selector, query, program, params;
-    public final Integer top_n;
-
-    public GCP_BLAST_REQUEST( final String line )
-    {
-        String[] parts = line.split( "\\:" );
-        this.req_id      = ( parts.length > 0 ) ? parts[ 0 ] : "Req_Id_0001";
-        this.query       = ( parts.length > 1 ) ? parts[ 1 ] : "CCGCAAGCCAGAGCAACAGCTCTAACAAGCAGAAATTCTGACCAAACTGATCCGGTAAAACCGATCAACG";
-        this.db_selector = ( parts.length > 2 ) ? parts[ 2 ] : "nt";
-        this.program     = ( parts.length > 3 ) ? parts[ 3 ] : "blastn";
-        this.params      = ( parts.length > 4 ) ? parts[ 4 ] : "blastn";
-        top_n = 10;
-    }
+    public final GCP_BLAST_REQUEST req;
+    public final GCP_BLAST_PARTITION part;
+    List< GCP_BLAST_HSP > hsps;
+    public Integer max_score;
     
+    public GCP_BLAST_HSP_LIST( final GCP_BLAST_REQUEST req, final GCP_BLAST_PARTITION part )
+    {
+        this.req  = req;
+        this.part = part;
+        this.hsps = new ArrayList<>();
+        this.max_score = 0;
+    }
+   
+    public void add( final GCP_BLAST_HSP hsp )
+    {
+        hsps.add( hsp );
+        if ( hsp.score > max_score )
+            max_score = hsp.score;
+    }
+
+    public Boolean isEmpty()
+    {
+        return hsps.isEmpty();
+    }
+
     @Override public String toString()
     {
-        if ( query.length() > 10 )
-            return String.format( "req( rid:'%s' dbsel:'%s' query:'%s...' prog:'%s' params:'%s' )",
-                                  req_id, db_selector, query.substring( 0, 10 ), program, params );
-        else
-            return String.format( "req( rid:'%s' dbsel:'%s' query:'%s' prog:'%s' params:'%s' )",
-                                  req_id, db_selector, query, program, params );
+        String res = String.format( "HSPLIST( %s on %s ) max:%d\n", req.toString(), part.toString(), max_score );
+        for ( GCP_BLAST_HSP hsp : hsps )
+            res = res + String.format( "\t%s\n", hsp.toString() );
+        return res;
     }
 }
+

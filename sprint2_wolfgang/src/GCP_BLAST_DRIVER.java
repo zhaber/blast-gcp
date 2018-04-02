@@ -26,6 +26,8 @@
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Iterator;
 
 import scala.Tuple2;
 
@@ -85,129 +87,102 @@ class GCP_BLAST_DRIVER extends Thread
             Broadcast< Boolean > LOG_JOB_DONE   = jssc.sparkContext().broadcast( settings.log_job_done );
             Broadcast< Boolean > LOG_FINAL      = jssc.sparkContext().broadcast( settings.log_final );
 
-            // create a list with N chunks for the database nt04, to be used later for creating jobs out of a request
+            // ***** STEP1: create a list of GCP_BLAST_PARTITION's on the master *****
             List< GCP_BLAST_PARTITION > db_sec_list = new ArrayList<>();
             for ( int i = 0; i < settings.num_db_partitions; i++ )
-                db_sec_list.add( new GCP_BLAST_PARTITION( settings.db_location, settings.db_pattern, i ) );
-            GCP_BLAST_CustomPartitioner myPartitioner = new GCP_BLAST_CustomPartitioner(settings.num_workers);
-            JavaRDD<GCP_BLAST_PARTITION > DB_SEC = sc.parallelize( db_sec_list).cache();
-			Integer numbases = DB_SEC.map(bp -> bp.getSize()).reduce((x, y) -> x + y);
-		
+                db_sec_list.add( new GCP_BLAST_PARTITION( settings.db_location, settings.db_pattern, i, settings.flat_db_layout ) );
 
-            // receive one or multiple lines from the source
+            // ***** STEP2: create a custom partitioner for the catesian - step ( STEP5 ) *****
+            GCP_BLAST_CustomPartitioner myPartitioner = new GCP_BLAST_CustomPartitioner( settings.num_workers );
+
+            // ***** STEP3: distribute the PARTITION-LIST *****
+            JavaRDD< GCP_BLAST_PARTITION > DB_SEC = sc.parallelize( db_sec_list ).cache();
+
+            // to get the sum of the size of all databases
+			Integer numbases = DB_SEC.map( bp -> bp.getSize() ).reduce( ( x, y ) -> x + y );
+
+            // ***** STEP4: establish the data-source ( listens on a socket for requests ) *****
             JavaDStream< String > REQ_STREAM = jssc.socketTextStream( settings.trigger_host, settings.trigger_port );
             REQ_STREAM.cache();
 
-            // join the PARTITIONS with the PAIRED_LINES, to trigger reshuffling
-            JavaPairDStream< GCP_BLAST_PARTITION,String> JOINED_REQ_STREAM
+            // ***** STEP5: build the cartesion between Requests and Partitions, and repartition by custom partitioner *****
+            JavaPairDStream< GCP_BLAST_PARTITION, String > JOINED_REQ_STREAM
                 = REQ_STREAM.transformToPair( rdd ->
             {
-                return DB_SEC.cartesian( rdd ).partitionBy(myPartitioner);
-            } ).repartition( settings.num_workers );
-            JOINED_REQ_STREAM.cache();
-
-            // create jobs from a request, a request comes in via the socket as 'job_id:db:query:params'
-            JavaPairDStream< String, GCP_BLAST_JOB > JOBS = JOINED_REQ_STREAM.mapToPair( j ->
-            {
-                String jkey                 = "nt";
-                String req_line             = j._2();
-                GCP_BLAST_PARTITION part    = j._1();
-                if ( LOG_REQUEST.getValue() )
-                    GCP_BLAST_SEND.send( LOG_HOST.getValue(), LOG_PORT.getValue(), String.format( "Request: %s received (%s)(%s)", req_line, jkey, part.toString() ) );
-                
-                GCP_BLAST_REQUEST req = new GCP_BLAST_REQUEST( req_line );
-                return new Tuple2<>( part.name, new GCP_BLAST_JOB( req, part ) );
+                return DB_SEC.cartesian( rdd ).partitionBy( myPartitioner );
             } ).cache();
 
-
-            //JavaPairDStream< String, GCP_BLAST_JOB > PJOBS = JOBS.repartition( 2 );
-            //PJOBS.cache();
-
-
-            //List< List< Tuple2< String, GCP_BLAST_JOB > > > lPj = PJOBS.glom().collect();
-            //GCP_BLAST_SEND.send( LOG_HOST.getValue(), LOG_PORT.getValue(),
-            //        String.format( "PJOBS.partitions: %s", lPj ) );
-
-            // send it to the search-function, which turns it into HSP's
-            JavaDStream< GCP_BLAST_HSP > SEARCH_RES = JOBS.flatMap( job_pair ->
+            // ***** STEP6: perform prelim-search on each job, creates multiple HSPs from each job *****
+            JavaDStream< GCP_BLAST_HSP_LIST > SEARCH_RES = JOINED_REQ_STREAM.map( item ->
             {
-                GCP_BLAST_JOB job = job_pair._2();
-                ArrayList< GCP_BLAST_HSP > res = new ArrayList<>();
+                GCP_BLAST_PARTITION part = item._1();
+                GCP_BLAST_REQUEST req = new GCP_BLAST_REQUEST( item._2() ); // REQ-LINE to REQUEST
+                GCP_BLAST_HSP_LIST hsps = new GCP_BLAST_HSP_LIST( req, part );
 
                 BlastJNI blaster = new BlastJNI ();
                 // ++++++ this is the where the work happens on the worker-nodes ++++++
 
                 if ( LOG_JOB_START.getValue() )
                     GCP_BLAST_SEND.send( LOG_HOST.getValue(), LOG_PORT.getValue(),
-                                     String.format( "starting request: '%s' at '%s' ", job.req.req_id, job.partition.db_spec ) );
+                                     String.format( "starting request: '%s' at '%s' ", req.req_id, part.db_spec ) );
 
                 Integer count = 0;
                 try
                 {
-                    //query, db_spec, program, params 
-                    String[] search_res = blaster.jni_prelim_search( job.req.req_id, job.req.query, job.partition.db_spec, job.req.params );
+                    //query, db_spec, program, params
+                    String rid = req.req_id;
+                    String[] search_res = blaster.jni_prelim_search( rid, req.query, part.db_spec, req.params );
 
                     count = search_res.length;
                 
                     if ( LOG_JOB_DONE.getValue() )
                         GCP_BLAST_SEND.send( LOG_HOST.getValue(), LOG_PORT.getValue(),
-                                         String.format( "request '%s'.'%s' done -> count = %d", job.req.req_id, job.partition.db_spec, count ) );
+                                         String.format( "request '%s'.'%s' done -> count = %d", rid, part.db_spec, count ) );
 
                     if ( count > 0 )
                     {
                         for ( String S : search_res )
-                        {
-                            //GCP_BLAST_SEND.send( LOG_HOST.getValue(), LOG_PORT.getValue(), String.format( "HSP: '%s'", S ) );
-                            res.add( new GCP_BLAST_HSP( job, S ) );
-                        }
+                            hsps.add( new GCP_BLAST_HSP( S ) );
                     }
                 }
                 catch ( Exception e )
                 {
                     GCP_BLAST_SEND.send( LOG_HOST.getValue(), LOG_PORT.getValue(),
-                                         String.format( "request exeption: '%s' for '%s'", e, job.toString() ) );
+                                         String.format( "request exeption: '%s on %s' for '%s'", e, req.toString(), part.toString() ) );
                 }
+                return hsps;
+            } ).cache();
 
-                if ( count == 0 )
-                   res.add( new GCP_BLAST_HSP( job ) ); // empty job
+            JavaDStream< GCP_BLAST_RID_SCORE > SCORES = SEARCH_RES.map( item -> {
+                return new GCP_BLAST_RID_SCORE( item.req.req_id, item.max_score, item.req.top_n );
+            }).cache();
 
-                /*                
-                GCP_BLAST_JNI_EMULATOR emu = new GCP_BLAST_JNI_EMULATOR();
-                ArrayList< GCP_BLAST_HSP > res = emu.make_hsp( job._2(), 3, 10101L );
+            JavaDStream< GCP_BLAST_RID_SCORE > R_SCORES = SCORES.reduce( ( accum, item ) -> {
+                return new GCP_BLAST_RID_SCORE( accum, item );
+            });
+            /*
+            JavaDStream< GCP_BLAST_HSP_JOB > SEARCH_RES2 = SEARCH_RES.reduce( ( accum, item ) -> {
+                accum.add( item );
+                return accum;
+            } ).cache();
+            */
 
-                if ( LOG_JOB_DONE.getValue() )
-                    GCP_BLAST_SEND.send( LOG_HOST.getValue(), LOG_PORT.getValue(),
-                                         String.format( "emu.done : '%s'", job._2().toString() ) );
-                */
-                return res.iterator();
-            } );
-
-            // persist in memory --- prevent recomputing
-            SEARCH_RES.cache();
-            
-            // map FILTERED via simulated Backtrace into FINAL ( mocked by calling toString )
-            JavaDStream< String > FINAL = SEARCH_RES.map( hsp -> hsp.toString() );
-            FINAL.cache();
-            
-            // print the FINAL ( this runs on a workernode! )
-            FINAL.foreachRDD( rdd -> {
+            // ***** STEPX:  *****
+            SEARCH_RES .foreachRDD( rdd -> {
                 long count = rdd.count();
                 if ( count > 0 )
                 {
-                    rdd.saveAsTextFile( SAVE_DIR.getValue() );
                     if ( LOG_FINAL.getValue() )
                     {
-                        rdd.foreachPartition( rdd_part -> {
+                        rdd.foreachPartition( iter -> {
                             int i = 0;
-                            while( rdd_part.hasNext() /* && ( i < 10 ) */ )
-                            {
+                            while( iter.hasNext() )
                                 GCP_BLAST_SEND.send( LOG_HOST.getValue(), LOG_PORT.getValue(),
-                                                     String.format( "[%d of %d] %s", i, count, rdd_part.next() ) );
-                                i += 1;
-                            }
+                                                 String.format( "[%d of %d] %s", i++, count, iter.next().toString() ) );
                         } );
                     }
-					GCP_BLAST_SEND.send( LOG_HOST.getValue(), LOG_PORT.getValue(), String.format( "REQUEST DONE: %d", count ) );
+                    GCP_BLAST_SEND.send( LOG_HOST.getValue(), LOG_PORT.getValue(), String.format( "REQUEST DONE: %d (%d)", count, rdd.id() ) );
+                    rdd.saveAsTextFile( String.format( "%s%d", SAVE_DIR.getValue(), rdd.id() ) );
                 }
             } );
 

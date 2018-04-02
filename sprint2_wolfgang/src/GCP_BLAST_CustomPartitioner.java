@@ -28,21 +28,22 @@ import org.apache.spark.Partitioner;
 import scala.Tuple2;
 
 
-class GCP_BLAST_CustomPartitioner extends Partitioner{
+class GCP_BLAST_CustomPartitioner extends Partitioner
+{
 	private int numParts;
 	
-	public GCP_BLAST_CustomPartitioner(int i) {
-		numParts=i;
+	public GCP_BLAST_CustomPartitioner( int i )
+    {
+		numParts = i;
 	}
 
-	@Override
-	public int numPartitions()
-	{
+	@Override public int numPartitions()
+    {
 	    return numParts;
 	}
 
-	@Override
-	public int getPartition(Object key){
-		return ((GCP_BLAST_PARTITION)key).getPartition(numParts);
+	@Override public int getPartition( Object key )
+    {
+		return ( ( GCP_BLAST_PARTITION ) key ).getPartition( numParts );
     }
 }
