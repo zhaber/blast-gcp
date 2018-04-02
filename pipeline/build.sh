@@ -3,6 +3,8 @@ set -o nounset
 set -o pipefail
 set -o errexit
 
+tput reset
+
 PIPELINEBUCKET="gs://blastgcp-pipeline-test"
 
 set +errexit
@@ -51,8 +53,8 @@ echo "Creating BlastJNI header: $HDR"
 #NOTE: javah deprecated in Java 9, removed in Java 10
 TMPDIR=`mktemp -d`
 javac -cp target/blastjni-0.0314-jar-with-dependencies.jar  -d $TMPDIR -h . src/main/java/BlastJNI.java
-rm -f $TMPDIR/BlastJNI.class
-rmdir $TMPDIR
+#rm -f $TMPDIR/BlastJNI.class $TMPDIR/GCP_BLAST_LIB.class
+#rmdir $TMPDIR
 
 if [ "$BUILDENV" = "ncbi" ]; then
     echo "Compiling and linking blastjni.cpp"

@@ -20,60 +20,110 @@
  *  Please cite the author in any work or product based on this material.
  */
 
+package gov.nih.nlm.ncbi.blastjni;
+
 import java.lang.String;
-import java.lang.Throwable;
-import java.lang.ExceptionInInitializerError;
+import java.lang.System;
 import java.io.PrintWriter;
+import org.apache.spark.SparkFiles;
 
-public class BlastJNI
+class GCP_BLAST_LIB
 {
-    public String [] jni_prelim_search ( String query, String db_spec, String program, String params )
+    String [] jni_prelim_search ( String query, String db_spec, String program, String params )
     {
-        return jni . prelim_search ( query, db_spec, program, params );
+        if ( log_writer != null )
+            log ( "jni_prelim_search called with " + query + ",'" + db_spec + "','" + program + "," + params + "'" );
+
+        String [] results = prelim_search ( query, db_spec, program, params );
+
+        if ( log_writer != null )
+            log ( "jni_prelim_search returned " + results . length + " results" );
+
+        return results;
     }
 
-    public String [] jni_traceback ( String query, String db_spec, String program, String params, final String [] jsonHSPs )
+    String [] jni_traceback ( String query, String db_spec, String program, String params, final String [] jsonHSPs )
     {
-        return jni . traceback ( query, db_spec, program, params, jsonHSPs );
-    }
-
-    public BlastJNI ()
-    {
-        jni . throwIfBad ();
-    }
-
-    public static void main ( String [] args )
-    {
-        /*
-           String rid  ="ReqID123";
-           String query ="CCGCAAGCCAGAGCAACAGCTCTAACAAGCAGAAATTCTGACCAAACTGATCCGGTAAAACCGATCAACG";
-           String db    ="nt";
-           String db_bucket=db + "_50mb_chunks";
-           String params="blastn";
-
-        // Prelim_search test
-        ArrayList<String> al=new ArrayList<String>();
-        // Keep it manageble, above query has hits in partitions #14 & 18
-        for (int partnum=12; partnum <= 18; ++partnum)
+        if ( log_writer != null )
         {
-        String part=db + "_50M." + String.format("%02d", partnum);
-
-        log("----   Processing part " + partnum);
-        String results[]=new BlastJNI().jni_prelim_search(db_bucket, db, rid, query, part, params);
-
-        log("Java results[] has " + results.length + " entries:");
-        log(Arrays.toString(results));
-        al.addAll(Arrays.asList(results));
+            log ( "jni_traceback called with:" );
+            for ( String s: jsonHSPs )
+                log ( "hsp: " + s );
         }
-        String hsp[]=al.toArray(new String[0]);
 
-        // Traceback test
-        String[] tracebacks=new BlastJNI().jni_traceback(hsp);
-        log("Java traceback[] has " + tracebacks.length + " entries:");
-        log(Arrays.toString(tracebacks));
-        */
+        String [] results = traceback ( query, db_spec, program, params, jsonHSPs );
+
+        if ( log_writer != null )
+        {
+            log ( "jni_traceback returned " + results . length + " result:" );
+            for ( String s : results )
+                log ( "traceback: " + s );
+        }
+
+        return results;
     }
 
-    private static Blast_JNI jni = new Blast_JNI ();
+    void setLogWriter ( PrintWriter writer )
+    {
+        log_writer = writer;
+    }
+
+    private synchronized void log ( String msg )
+    {
+        log_writer . println ( "(java) " + msg );
+        log_writer . flush ();
+    }
+
+    GCP_BLAST_LIB ()
+    {
+        try
+        {
+            // Java will look for libblastjni.so
+            System.loadLibrary( "blastjni" );
+        }
+        catch ( Throwable e )
+        {
+            try
+            {
+                System.load( SparkFiles.get( "libblastjni.so" ) );
+            }
+            catch ( ExceptionInInitializerError x )
+            {
+                invalid = x;
+            }
+            catch ( Throwable e2 )
+            {
+                invalid = new ExceptionInInitializerError ( e2 );
+            }
+        }
+    }
+
+    void throwIfBad ()
+    {
+        if ( invalid != null )
+            throw invalid;
+    }
+
+    private ExceptionInInitializerError invalid;
+    private PrintWriter log_writer;
+
+    /*
+       private native String [] prelim_search ( String query, String db_spec, String program, String params );
+       private native String [] traceback ( String query, String db_spec, String program, String params, final String [] jsonHSPs );
+       */
+
+    String [] prelim_search ( String query, String db_spec, String program, String params )
+    {
+        String [] hsps = new String [ 1 ];
+        hsps [ 0 ] = "fake HSP";
+        return hsps;
+    }
+
+    String [] traceback ( String query, String db_spec, String program, String params, final String [] jsonHSPs )
+    {
+        String [] hsps = new String [ 1 ];
+        hsps [ 0 ] = "fake traceback HSP";
+        return hsps;
+    }
 }
 

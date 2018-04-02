@@ -25,9 +25,8 @@
  */
 
 #include "BlastJNI.h"
-#include <jni.h>
-
 #include "blast4spark.hpp"
+
 #include <algo/blast/api/blast_advprot_options.hpp>
 #include <algo/blast/api/blast_exception.hpp>
 #include <algo/blast/api/blast_nucl_options.hpp>
@@ -42,6 +41,7 @@
 #include <iomanip>
 #include <iostream>
 #include <iterator>
+#include <jni.h>
 #include <ncbi_pch.hpp>
 #include <objects/seq/Bioseq.hpp>
 #include <objects/seq/Seq_data.hpp>
@@ -50,6 +50,7 @@
 #include <objects/seqloc/Seq_id.hpp>
 #include <objects/seqset/Bioseq_set.hpp>
 #include <objects/seqset/Seq_entry.hpp>
+#include <stdexcept>
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -97,7 +98,7 @@ static void jni_throw(JNIEnv* jenv, uint32_t xtype, const char* fmt,
     }
 
     // if not a known type, must throw RuntimeException
-    if (jexcept_cls == 0)
+    if (!jexcept_cls)
         jexcept_cls = jenv->FindClass("java/lang/RuntimeException");
 
     jni_throw(jenv, jexcept_cls, fmt, args);
@@ -169,19 +170,19 @@ static void whack_hsp_lists(std::vector<BlastHSPList*>& hsp_lists)
 }
 
 static jobjectArray prelim_search(JNIEnv* jenv, jobject jthis,
-                                  jmethodID jlog_method, const char* query,
-                                  const char* db_spec, const char* program,
-                                  const char* params)
+                                  jmethodID jlog_method, const char* jquery,
+                                  const char* jdb_spec, const char* jprogram,
+                                  const char* jparams)
 {
-    ncbi::blast::BlastHSPStream* hsp_stream
-        = ncbi::blast::PrelimSearch(query, db_spec, sparams);
+    ncbi::blast::TBlastHSPStream* hsp_stream = ncbi::blast::PrelimSearch(
+        std::string(jquery), std::string(jdb_spec), std::string(jparams));
 
-    if (hsp_stream == 0)
-        throw std::exception("prelim_search - NULL hsp_stream");
+    if (!hsp_stream)
+        throw std::runtime_error("prelim_search - NULL hsp_stream");
 
     jclass GCP_BLAST_HSP_LIST = jenv->FindClass("GCP_BLAST_HSP_LIST");
-    if (GCP_BLAST_HSP_LIST == 0)
-        throw std::exception(
+    if (!GCP_BLAST_HSP_LIST)
+        throw std::runtime_error(
             "prelim_search - failed to locate GCP_BLAST_HSP_LIST class");
 
     jobjectArray jhsps = 0;
@@ -190,13 +191,14 @@ static jobjectArray prelim_search(JNIEnv* jenv, jobject jthis,
     try {
         while (1) {
             BlastHSPList* hsp_list = 0;
-            int status = BlastHSPStreamRead(hsp_stream, &hsp_list);
+            int status
+                = BlastHSPStreamRead(hsp_stream->GetPointer(), &hsp_list);
 
             if (status == kBlastHSPStream_Error)
-                throw std::exception(
+                throw std::runtime_error(
                     "prelim_search - Exception from BlastHSPStreamRead");
 
-            if (status != kBlastHSPStream_Success || hsp_list == 0) break;
+            if (status != kBlastHSPStream_Success || !hsp_list) break;
 
             hsp_lists.push_back(hsp_list);
         }
@@ -205,12 +207,13 @@ static jobjectArray prelim_search(JNIEnv* jenv, jobject jthis,
     }
     catch (...) {
         whack_hsp_lists(hsp_lists);
-        BlastHSPStreamFree(hsp_stream);
+        //        BlastHSPStreamFree(hsp_stream);
         throw;
     }
 
     whack_hsp_lists(hsp_lists);
-    BlastHSPStreamFree(hsp_stream);
+    //   BlastHSPStreamFree(hsp_stream);
+
     return jhsps;
 }
 
@@ -268,7 +271,8 @@ JNIEXPORT jobjectArray JNICALL Java_GCP_1BLAST_1LIB_prelim_1search(
  */
 JNIEXPORT jobjectArray JNICALL Java_GCP_1BLAST_1LIB_traceback(
     JNIEnv* jenv, jobject jthis, jstring jquery, jstring jdb_spec,
-    jstring jprogram, jstring jparams, jobjectArray jjsonHSPs)
+    jstring jprogram, jstring jparams, jobjectArray jjsonHSPs,
+    jboolean have_log)
 {
     uint32_t xtype = xc_no_err;
 
@@ -287,8 +291,8 @@ JNIEXPORT jobjectArray JNICALL Java_GCP_1BLAST_1LIB_traceback(
     }
 
     try {
-        ret = traceback(jenv, jthis, jlog_method, query, db_spec, program,
-                        params, hsps);
+        // ret = traceback(jenv, jthis, jlog_method, query, db_spec, program,
+        // params, hsps);
     }
     catch (std::exception& x) {
         jni_throw(jenv, xtype = xc_java_exception, "%s", x.what());
