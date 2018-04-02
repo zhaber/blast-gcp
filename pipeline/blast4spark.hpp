@@ -1,4 +1,4 @@
-/*  $Id: blast4spark.hpp 560346 2018-03-21 20:54:19Z camacho $
+/*  $Id: blast4spark.hpp 560856 2018-03-28 15:00:11Z boratyng $
  * ===========================================================================
  *
  *                            PUBLIC DOMAIN NOTICE
@@ -49,6 +49,9 @@ extern "C" {
 BEGIN_NCBI_SCOPE
 BEGIN_SCOPE(blast)
 
+template<class T> class CStructWrapper;
+typedef CStructWrapper<BlastHSPStream> TBlastHSPStream;
+
 
 /// Simplified HSP returned from preliminary search in spark
 struct SFlatHSP
@@ -71,7 +74,7 @@ struct SFlatHSP
 
 
 NCBI_XBLAST_EXPORT 
-BlastHSPStream*
+TBlastHSPStream*
 PrelimSearch(const std::string& single_query, 
         const std::string& database_name,
         const std::string& program_name);
@@ -83,7 +86,7 @@ int
 TracebackSearch(const std::string& single_query,
                 const std::string& database_name,
                 const std::string& program_name,
-                std::vector<SFlatHSP>& flat_hsp_list,
+                const std::vector<SFlatHSP>& flat_hsp_list,
                 TIntermediateAlignments& alignments);
 
 
