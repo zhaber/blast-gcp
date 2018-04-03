@@ -3,8 +3,6 @@ set -o nounset
 set -o pipefail
 set -o errexit
 
-tput reset
-
 PIPELINEBUCKET="gs://blastgcp-pipeline-test"
 
 set +errexit
@@ -16,6 +14,7 @@ if [ "$distro" -ne 0 ]; then
     export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
     export PATH="$JAVA_HOME/bin:$PATH"
     export BLASTDB=/tmp/blast/
+    export SPARK_HOME=/usr/lib/spark/
 else
     export DISTRO="CentOS 7"
     export BUILDENV="ncbi"
@@ -23,6 +22,8 @@ else
     export LD_LIBRARY_PATH=".:/opt/ncbi/gcc/4.9.3/lib64/"
     export BLASTDB=/net/frosty/vol/blast/db/blast
     BLASTBYDATE=/netopt/ncbi_tools64/c++.stable/
+    export SPARK_HOME=/usr/local/spark/2.2.0/
+
 #    BLASTBYDATE=/netopt/ncbi_tools64/c++.by-date/20180319/
 fi
 
@@ -40,21 +41,27 @@ rm -f /tmp/blastjni.log
 
 
 # TODO: provided dependencies?
-echo "Maven packaging..."
-echo "  (can take a while, especially if ~/.m2 cache is empty)"
-mvn -q package
-mvn -q assembly:assembly -DdescriptorId=jar-with-dependencies
+#echo "Maven packaging..."
+#echo "  (can take a while, especially if ~/.m2 cache is empty)"
+#mvn -q package
+#mvn -q assembly:assembly -DdescriptorId=jar-with-dependencies
 
 # TODO: Unfortunately, BlastJNI.h can only be built @ Google, due to
 #packages,  but is required by g++ # at NCBI.
+DEPENDS="$SPARK_HOME/jars/*:."
+MAIN_JAR="sprint3.jar"
 HDR="BlastJNI.h"
-echo "Creating BlastJNI header: $HDR"
+echo "Compiling Java and creating $HDR"
 #javac -d . -h . src/main/java/BlastJNI.java
 #NOTE: javah deprecated in Java 9, removed in Java 10
-TMPDIR=`mktemp -d`
-javac -cp target/blastjni-0.0314-jar-with-dependencies.jar  -d $TMPDIR -h . src/main/java/BlastJNI.java
-#rm -f $TMPDIR/BlastJNI.class $TMPDIR/GCP_BLAST_LIB.class
+#TMPDIR=`mktemp -d`
+#javac -cp target/blastjni-0.0314-jar-with-dependencies.jar  -d $TMPDIR -h . src/main/java/BlastJNI.java
+#javac -Xlint:all -cp $DEPENDS -d $TMPDIR -h . src/main/java/BlastJNI.java
+#rm -f $TMPDIR/BlastJNI.class
 #rmdir $TMPDIR
+#javac -Xlint:all -Xlint:-path -cp $DEPENDS -d . src/main/java/BlastJNI.java
+javac -Xlint:all -Xlint:-path -cp $DEPENDS -d . BlastJNI.java
+jar cf $MAIN_JAR gov/nih/nlm/ncbi/blastjni/*class
 
 if [ "$BUILDENV" = "ncbi" ]; then
     echo "Compiling and linking blastjni.cpp"

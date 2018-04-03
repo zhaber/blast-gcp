@@ -1,4 +1,6 @@
 target/
+gov/
 *.result
 BlastJNI.jar
+sprint3.jar
 
