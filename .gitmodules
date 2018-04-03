@@ -1,0 +1,3 @@
+[submodule "symbol-enum"]
+	path = symbol-enum
+	url = https://github.com/zhaber/symbol-enum
